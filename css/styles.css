@@ -1,0 +1,84 @@
+.sidebar-transition { transition: all 0.3s ease; }
+.sidebar-open { width: 14rem; }
+.sidebar-closed { width: 4rem; }
+.sidebar-closed .sidebar-text { display: none; }
+.sidebar-closed .sidebar-icon { margin-right: 0; margin-left: auto; margin-right: auto; }
+.sidebar-closed .sidebar-link-content { justify-content: center; }
+
+.loader {
+  border: 3px solid #F4F7F6;
+  border-top: 3px solid #013362;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  animation: spin 1s linear infinite;
+}
+
+.loader-small {
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top: 2px solid #013362;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  animation: spin 1s linear infinite;
+}
+
+.loader-small.loader-white { border-top: 2px solid #FFFFFF; }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.flash-checkbox,
+.toggle-checkbox {
+  appearance: none;
+  background-color: #fff;
+  margin: 0;
+  font: inherit;
+  color: currentColor;
+  width: 1.25em;
+  height: 1.25em;
+  border: 2px solid #D1D5DB;
+  border-radius: 0.25em;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.flash-checkbox::before,
+.toggle-checkbox::before {
+  content: "";
+  width: 0.7em;
+  height: 0.7em;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  box-shadow: inset 1em 1em #013362;
+  transform-origin: bottom left;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.flash-checkbox:checked,
+.toggle-checkbox:checked {
+  border-color: #013362;
+}
+
+.flash-checkbox:checked::before,
+.toggle-checkbox:checked::before {
+  transform: scale(1);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F4F7F6; }
+::-webkit-scrollbar-thumb { background: #AEB5BF; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #013362; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}

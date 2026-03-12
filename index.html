@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neptuno FZ - Gestor de Finanzas</title>
+  <link rel="icon" type="image/svg+xml" href="./images/favicon.svg">
+  
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0" />
+  <link rel="stylesheet" href="./css/styles.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'tema-1': '#013362',
+            'tema-2': '#87D8C2',
+            'tema-3': '#070806',
+            'tema-4': '#1C6227',
+            'tema-5': '#56AED9',
+            'tema-bg': '#F4F7F6',
+          },
+        },
+      },
+    }
+  </script>
+</head>
+
+<body class="bg-tema-bg h-screen overflow-hidden font-sans text-tema-3 text-sm">
+
+  <!--
+    IMPORTANTE:
+    Debajo pega EXACTAMENTE tu bloque HTML actual desde:
+    <div id="app" class="h-full flex flex-col">
+    ...
+    </div>
+
+    No necesitas cambiar el diseño.
+    Solo haz estos 3 ajustes pequeños dentro de tu HTML actual:
+
+    1) En la tabla historial:
+       :key="t.idx"
+       cámbialo por:
+       :key="t.idx || t.id"
+
+    2) Donde muestras el id:
+       {{ t.idx }}
+       cámbialo por:
+       {{ t.idx || t.id }}
+
+    3) En deleteTransaction, ejecutarCuadre, savePG, etc., no se toca el HTML;
+       el cambio va en app.js.
+  -->
+
+  <div id="app" class="h-full flex flex-col">
+  
+  <!-- BARRA DE NAVEGACIÓN -->
+  <nav class="bg-tema-1 px-4 shadow-md z-30 relative border-b-[3px] border-tema-2 h-14 flex items-center shrink-0">
+    <div class="flex justify-between items-center w-full max-w-full mx-auto text-white">
+      <div class="flex flex-col justify-center">
+        <h1 class="text-xl font-black tracking-tight leading-none flex items-center">Neptuno FZ <sup class="text-[10px] font-light text-tema-2 ml-1">©</sup></h1>
+        <h2 class="text-white/70 text-[10px] leading-tight font-normal tracking-wide">Luis Prieto - Finanzas Personales</h2>
+      </div>
+      <div v-if="isAuthenticated" class="flex items-center space-x-3 animate-fade-in text-sm">
+        <span class="hidden sm:block font-medium">{{ displayName }}</span>
+        <div class="w-8 h-8 rounded-full bg-tema-5 text-tema-1 flex items-center justify-center font-bold shadow-sm">{{ userInitials }}</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CARGA -->
+  <div v-if="isCheckingUser" class="flex-1 flex flex-col items-center justify-center animate-fade-in">
+    <div class="loader mb-3"></div>
+    <p class="text-tema-1 font-bold text-sm tracking-wide">Validando sesión...</p>
+  </div>
+
+  <!-- LOGIN -->
+  <div v-else-if="!isAuthenticated && !isCheckingUser" class="flex-1 flex items-center justify-center p-4 animate-fade-in">
+    <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-300 w-full max-w-sm text-center">
+      <span class="material-symbols-outlined text-5xl text-tema-1 mb-2">lock_person</span>
+      <h2 class="text-2xl font-bold text-tema-3 mb-6">Iniciar Sesión</h2>
+      <div v-if="loginError" class="bg-red-50 border-l-4 border-red-500 text-red-700 p-3 mb-5 text-sm rounded-r-md text-left">{{ loginError }}</div>
+      <form @submit.prevent="handleLogin" class="space-y-5 text-left">
+        <div><label class="block text-sm font-medium text-gray-700">Usuario</label><input type="text" v-model="loginForm.username" required class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-tema-1 outline-none transition-all"></div>
+        <div><label class="block text-sm font-medium text-gray-700">Contraseña</label><input type="password" v-model="loginForm.password" required class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-tema-1 outline-none transition-all"></div>
+        <button type="submit" :disabled="!isLoginFormValid || isLoggingIn" class="w-full bg-tema-1 text-white font-bold py-2.5 rounded-md hover:bg-tema-5 hover:text-tema-1 transition-colors flex justify-center items-center">
+          <span v-if="!isLoggingIn">Ingresar</span><div v-else class="loader-small loader-white ml-2"></div>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div v-else class="flex-1 flex overflow-hidden animate-fade-in relative text-tema-3">
+    <div v-if="!isDesktopView && showSidebar" @click="showSidebar = false" class="absolute inset-0 bg-tema-3/40 z-10 transition-opacity"></div>
+
+    <!-- SIDEBAR -->
+    <aside :class="['bg-white shadow-xl pt-4 pb-4 border-r border-gray-300 sidebar-transition z-20 flex flex-col h-full', isDesktopView ? 'relative' : 'absolute top-0 bottom-0 left-0', isDesktopView ? (isSidebarOpen ? 'sidebar-open px-4' : 'sidebar-closed px-1') : 'sidebar-open px-4', !isDesktopView && !showSidebar ? '-translate-x-full' : 'translate-x-0']">
+      <div class="space-y-1.5 flex-1 text-sm text-tema-3">
+        <div v-if="isDesktopView" class="flex mb-4" :class="isSidebarOpen ? 'justify-end' : 'justify-center'">
+          <button @click="isSidebarOpen = !isSidebarOpen" class="text-tema-1 p-1 rounded-md transition duration-150 bg-tema-5/20 hover:bg-tema-1 hover:text-white flex items-center justify-center shadow-sm">
+            <span class="material-symbols-outlined text-xl">{{ isSidebarOpen ? 'first_page' : 'last_page' }}</span>
+          </button>
+        </div>
+
+        <a href="#" @click.prevent="activeView = 'registrarPG'; fetchFormData()" :class="['block p-2 rounded transition border-l-4', activeView === 'registrarPG' ? 'bg-tema-bg text-tema-1 font-black border-tema-1' : 'text-gray-600 border-transparent hover:bg-tema-bg']">
+          <div class="flex items-center sidebar-link-content"><span class="material-symbols-outlined sidebar-icon text-xl" :class="isSidebarOpen ? 'mr-3' : ''">local_mall</span><span class="sidebar-text truncate">Registrar P&G</span></div>
+        </a>
+
+        <a href="#" @click.prevent="activeView = 'flash'; fetchFormData()" :class="['block p-2 rounded transition border-l-4', activeView === 'flash' ? 'bg-tema-bg text-tema-1 font-black border-tema-1' : 'text-gray-600 border-transparent hover:bg-tema-bg']">
+          <div class="flex items-center sidebar-link-content"><span class="material-symbols-outlined sidebar-icon text-xl" :class="isSidebarOpen ? 'mr-3' : ''">bolt</span><span class="sidebar-text truncate">Registro Flash</span></div>
+        </a>
+
+        <a href="#" @click.prevent="activeView = 'lista'; fetchListData()" :class="['block p-2 rounded transition border-l-4', activeView === 'lista' ? 'bg-tema-bg text-tema-1 font-black border-tema-1' : 'text-gray-600 border-transparent hover:bg-tema-bg']">
+          <div class="flex items-center sidebar-link-content"><span class="material-symbols-outlined sidebar-icon text-xl" :class="isSidebarOpen ? 'mr-3' : ''">format_list_bulleted</span><span class="sidebar-text truncate">Movimientos</span></div>
+        </a>
+
+        <a href="#" @click.prevent="openTesoreria()" :class="['block p-2 rounded transition border-l-4', activeView === 'tesoreria' ? 'bg-tema-bg text-tema-1 font-black border-tema-1' : 'text-gray-600 border-transparent hover:bg-tema-bg']">
+          <div class="flex items-center sidebar-link-content"><span class="material-symbols-outlined sidebar-icon text-xl" :class="isSidebarOpen ? 'mr-3' : ''">savings</span><span class="sidebar-text truncate">Tesorería</span></div>
+        </a>
+
+        <a href="#" @click.prevent="openDashboard()" :class="['block p-2 rounded transition border-l-4', activeView === 'dashboard' ? 'bg-tema-bg text-tema-1 font-black border-tema-1' : 'text-gray-600 border-transparent hover:bg-tema-bg']">
+          <div class="flex items-center sidebar-link-content"><span class="material-symbols-outlined sidebar-icon text-xl" :class="isSidebarOpen ? 'mr-3' : ''">space_dashboard</span><span class="sidebar-text truncate">Dashboard</span></div>
+        </a>
+      </div>
+      <div class="mt-auto border-t border-gray-200 pt-3 text-tema-3"><a href="#" @click.prevent="logout" class="block p-2 text-red-600 hover:bg-red-600 hover:text-white rounded-md transition-all font-bold text-sm"><div class="flex items-center"><span class="material-symbols-outlined mr-3">logout</span><span class="sidebar-text">Salir</span></div></a></div>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-6 h-full bg-tema-bg text-tema-3">
+      
+      <!-- BOTÓN MENÚ MÓVIL -->
+      <button v-if="!isDesktopView" @click="showSidebar = true" class="mb-4 p-2 bg-tema-1 text-white rounded-md shadow-md md:hidden flex items-center">
+        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        Menú
+      </button>
+
+      <!-- MODAL ERROR -->
+      <div v-if="showErrorModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 text-tema-3">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full border-t-4 border-red-500 animate-fade-in text-tema-3">
+          <div class="flex items-center mb-4 text-red-500"><span class="material-symbols-outlined text-3xl mr-2">error</span><h3 class="text-xl font-bold">Error</h3></div>
+          <p class="mb-4 text-sm text-tema-3">No se pudo procesar la transacción:</p>
+          <div class="bg-red-50 p-3 rounded text-xs font-mono mb-6 text-red-800 break-words">{{ failedErrorMessage }}</div>
+          <div class="flex justify-end"><button @click="showErrorModal = false" class="bg-tema-1 text-white font-bold py-2 px-6 rounded hover:bg-tema-5 hover:text-tema-1 transition-all">Entendido</button></div>
+        </div>
+      </div>
+
+      <!-- VISTA: REGISTRAR P&G -->
+      <div v-if="activeView === 'registrarPG'" class="animate-fade-in max-w-4xl mx-auto text-tema-3">
+        <div class="flex justify-between items-center mb-5 border-b-2 border-gray-300 pb-2 text-tema-3">
+          <div class="flex items-center text-tema-1"><span class="material-symbols-outlined text-3xl mr-3 text-tema-1">local_mall</span><h2 class="text-3xl font-black">Registrar P&G</h2></div>
+          <div v-if="isLoadingFormData" class="flex items-center text-gray-500 text-sm"><div class="loader-small mr-2"></div>Cargando...</div>
+        </div>
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-300">
+          <form @submit.prevent="savePG" class="space-y-6 text-tema-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div><label class="text-xs font-bold uppercase text-gray-400">Fecha Registro</label><input type="date" v-model="pgForm.fechaRegistro" required class="w-full px-3 py-2 border rounded border-gray-300 focus:ring-1 focus:ring-tema-1 outline-none text-sm bg-white text-tema-3"></div>
+              <div><label class="text-xs font-bold uppercase text-gray-400">Fecha Pago</label><input type="date" v-model="pgForm.fechaPago" required class="w-full px-3 py-2 border rounded border-gray-300 focus:ring-1 focus:ring-tema-1 outline-none text-sm bg-white text-tema-3"></div>
+            </div>
+            
+            <div class="p-4 bg-tema-bg rounded border border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-5 text-tema-3 text-tema-3">
+              <div><label class="text-xs font-bold uppercase text-gray-400">Tipo</label><select v-model="pgForm.tipo" required class="w-full p-2 border rounded text-sm bg-white outline-none focus:ring-1 focus:ring-tema-1 text-tema-3"><option value="" disabled>Seleccione...</option><option v-for="op in tiposOptions" :value="op">{{ op }}</option></select></div>
+              <div><label class="text-xs font-bold uppercase text-gray-400">Categoría</label><select v-model="pgForm.categoria" required :disabled="!pgForm.tipo" class="w-full p-2 border rounded text-sm bg-white outline-none focus:ring-1 focus:ring-tema-1 text-tema-3 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="" disabled>Seleccione...</option><option v-for="op in categoriasOptions" :value="op">{{ op }}</option></select></div>
+              <div><label class="text-xs font-bold uppercase text-gray-400">Grupo</label><select v-model="pgForm.grupo" required :disabled="!pgForm.categoria" class="w-full p-2 border rounded text-sm bg-white outline-none focus:ring-1 focus:ring-tema-1 text-tema-3 disabled:bg-gray-100 disabled:cursor-not-allowed"><option value="" disabled>Seleccione...</option><option v-for="op in gruposOptions" :value="op">{{ op }}</option></select></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-tema-3">
+              <div><label class="text-xs font-bold uppercase text-gray-400">Forma Pago</label><select v-model="pgForm.formaPago" required class="w-full p-2 border rounded text-sm bg-white outline-none focus:ring-1 focus:ring-tema-1 text-tema-3"><option value="" disabled>Seleccione...</option><option v-for="op in formasPagoOptionsActivas" :value="op" :key="op">{{ op }}</option></select></div>
+              <div><label class="text-xs font-bold uppercase text-gray-400">Tercero / Centro de Costo</label><select v-model="pgForm.tercero" required class="w-full p-2 border rounded text-sm bg-white outline-none focus:ring-1 focus:ring-tema-1 text-tema-3"><option value="" disabled>Seleccione...</option><option v-for="op in tercerosOptions" :value="op" :key="op">{{ op }}</option></select></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-tema-3">
+              <div><label class="text-xs font-bold uppercase text-gray-400">Valor</label><div class="relative text-tema-3"><span class="absolute inset-y-0 left-0 pl-3 flex items-center font-bold text-gray-500 text-lg">$</span><input type="text" v-model="pgForm.valor" @blur="pgForm.valor = formatInput(pgForm.valor)" @focus="pgForm.valor = cleanInput(pgForm.valor)" required class="w-full pl-8 py-2 border rounded text-2xl font-black text-tema-1 outline-none focus:ring-1 focus:ring-tema-1 text-tema-3"></div></div>
+              <div><label class="text-xs font-bold uppercase text-gray-400">Descripción</label><input type="text" v-model="pgForm.descripcion" required class="w-full p-2 border rounded text-sm outline-none focus:ring-1 focus:ring-tema-1 text-tema-3 text-tema-3" placeholder="Detalle del movimiento"></div>
+            </div>
+            
+            <div class="flex justify-end pt-4 border-t border-gray-300 text-tema-3">
+              <button type="submit" :disabled="!isPGFormValid || isSavingPG || isSaveSuccess" :class="isSaveSuccess ? 'bg-tema-4' : 'bg-tema-1'" class="text-white font-bold py-2.5 px-10 rounded flex items-center shadow-md transition-all text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-95 text-tema-bg">
+                <span v-if="!isSavingPG && !isSaveSuccess">Guardar Registro</span><span v-else-if="isSavingPG">Enviando...</span><span v-else-if="isSaveSuccess">¡Guardado!</span>
+                <div v-if="isSavingPG" class="loader-small loader-white ml-2"></div>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- VISTA: FLASH -->
+      <div v-if="activeView === 'flash'" class="animate-fade-in max-w-5xl mx-auto text-tema-3">
+        <div class="flex justify-between items-center mb-5 border-b-2 border-gray-300 pb-2 text-tema-3">
+          <div class="flex items-center text-tema-1 text-tema-3"><span class="material-symbols-outlined text-3xl mr-3 text-tema-1">bolt</span><h2 class="text-3xl font-black">Registro Flash</h2></div>
+          <div v-if="isLoadingFormData" class="flex items-center text-gray-500 text-sm"><div class="loader-small mr-2"></div>Cargando...</div>
+        </div>
+        <div v-for="(item, index) in dbFlash" :key="index" class="flex flex-col md:flex-row items-center gap-3 bg-white p-2 rounded-lg border border-gray-200 shadow-sm mb-2 hover:border-tema-1 transition-all">
+          
+          <div class="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center border"
+               :class="{
+                  'bg-red-50 border-red-100 text-red-500': item.tipo === 'Gasto',
+                  'bg-green-50 border-green-100 text-green-600': item.tipo === 'Ingreso',
+                  'bg-blue-50 border-blue-100 text-blue-500': item.tipo === 'Activo',
+                  'bg-orange-50 border-orange-100 text-orange-500': item.tipo === 'Pasivo',
+                  'bg-gray-50 border-gray-200 text-gray-500': !['Gasto','Ingreso','Activo','Pasivo'].includes(item.tipo)
+               }">
+             <span class="material-symbols-outlined text-2xl">
+               {{ item.tipo === 'Gasto' ? 'money_off' : item.tipo === 'Activo' ? 'domain' : item.tipo === 'Pasivo' ? 'account_balance' : 'attach_money' }}
+             </span>
+          </div>
+          
+          <div class="flex-grow flex flex-col md:flex-row gap-3 w-full text-sm text-tema-3">
+            <div class="md:w-1/4 leading-tight text-tema-3 flex flex-col justify-center">
+               <p class="font-black uppercase text-[11px] text-tema-3 tracking-tight">{{item.categoria}}</p>
+               <p class="text-[9px] font-bold uppercase tracking-tighter mt-0.5 whitespace-nowrap">
+                 <span :class="getTipoColor(item.tipo)">{{item.tipo}}</span> <span class="text-gray-400">&bull; {{item.grupo}}</span>
+               </p>
+            </div>
+            
+            <div class="md:w-3/4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-tema-3 items-center">
+              <select v-model="item.medio" class="w-full p-1 border border-gray-300 rounded text-xs bg-white text-tema-3 outline-none focus:ring-1 focus:ring-tema-1 transition-all"><option v-for="op in formasPagoOptionsActivas" :value="op" :key="op">{{op}}</option></select>
+              <select v-model="item.tercero" class="w-full p-1 border border-gray-300 rounded text-xs bg-white text-tema-3 outline-none focus:ring-1 focus:ring-tema-1 transition-all"><option v-for="op in tercerosOptions" :value="op" :key="op">{{op}}</option></select>
+              <input type="text" v-model="item.descripcion" class="w-full p-1 border border-gray-300 rounded text-xs text-tema-3 outline-none focus:ring-1 focus:ring-tema-1" placeholder="Descripción">
+            </div>
+          </div>
+          <div class="w-full md:w-32 lg:w-40 relative text-tema-3">
+             <span class="absolute inset-y-0 left-0 pl-2 flex items-center font-bold text-gray-400 text-xs">$</span>
+             <input type="text" v-model="item.valor" @blur="item.valor = formatInput(item.valor)" @focus="item.valor = cleanInput(item.valor)" class="w-full pl-6 py-1 border border-gray-300 rounded font-black text-tema-1 outline-none text-sm focus:ring-1 focus:ring-tema-1" placeholder="0">
+          </div>
+          <div class="flex items-center px-2 text-tema-3">
+             <input v-if="!item.isSaving" type="checkbox" v-model="item.checked" @change="saveFlashPG(item)" :disabled="!item.valor" class="flash-checkbox shadow-sm transition-all text-tema-3">
+             <div v-else class="loader-small border-t-tema-1 text-tema-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISTA: TESORERÍA -->
+      <div v-if="activeView === 'tesoreria'" class="animate-fade-in max-w-full mx-auto text-tema-3">
+        <div class="flex justify-between items-center mb-4 border-b-2 border-gray-300 pb-1.5">
+          <div class="flex items-center text-tema-1">
+            <span class="material-symbols-outlined text-2xl mr-2 text-tema-1">savings</span>
+            <h2 class="text-2xl font-black">Tesorería Central</h2>
+          </div>
+          
+          <div class="flex items-center gap-3 text-tema-3">
+            <div class="flex items-center gap-1.5 border-r border-gray-300 pr-3">
+              <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest hidden sm:inline">TRM USD:</span>
+              <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest sm:hidden">TRM:</span>
+              <div class="relative flex items-center">
+                 <span class="absolute inset-y-0 left-0 pl-1.5 flex items-center font-bold text-gray-400 text-[10px]">$</span>
+                 <input type="number" v-model.number="trmUSD" class="w-16 pl-4 pr-1 py-1 border border-gray-300 rounded-md text-[10px] bg-white outline-none font-bold text-tema-4 shadow-sm text-right">
+                 <button @click="fetchTRM" class="ml-1 text-gray-400 hover:text-tema-1 transition-colors" :class="{'animate-spin text-tema-1': isFetchingTRM}" title="Actualizar TRM Automáticamente">
+                    <span class="material-symbols-outlined text-[14px]">sync</span>
+                 </button>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-1.5">
+              <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest hidden sm:inline">Corte Histórico:</span>
+              <select v-model="tesoreriaFilter" class="p-1 border border-gray-300 rounded-md text-[10px] bg-white outline-none font-bold text-tema-1 shadow-sm text-tema-3 text-tema-3">
+                <option value="hoy">A Hoy ({{ todayFormatted }})</option>
+                <option value="mes_anterior">Cierre Mes Anterior</option>
+                <option value="año_anterior">Cierre Año Anterior</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isLoadingList" class="flex flex-col items-center justify-center p-20 text-gray-400 text-tema-3">
+           <div class="loader mb-4 text-tema-3"></div>
+           <p class="font-bold text-xs">Calculando flujos y saldos...</p>
+        </div>
+
+        <div v-else class="flex flex-col lg:flex-row gap-6 items-start">
+          
+          <div class="w-full lg:w-5/12 space-y-3">
+            <div v-for="grupo in saldosAgrupados" :key="grupo.tipo" class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden animate-fade-in text-tema-3 text-tema-3">
+              <div class="bg-gray-50/50 border-b border-gray-200 px-3 py-1 flex items-center justify-between text-tema-3">
+                 <div class="flex items-center gap-2 text-tema-3">
+                    <span class="material-symbols-outlined text-tema-1 text-[13px]">account_balance</span>
+                    <h3 class="text-[9px] font-black uppercase tracking-wider text-tema-1">{{ grupo.tipo }}</h3>
+                 </div>
+                 <div class="flex items-center gap-2 text-tema-3">
+                    <span class="text-[8px] font-bold text-gray-400 uppercase">Subtotal:</span>
+                    <span class="text-[11px] font-black text-tema-1">$ {{ formatInput(grupo.total) }} COP</span>
+                 </div>
+              </div>
+
+              <div class="p-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 text-tema-3">
+                <div v-for="medio in grupo.medios" :key="medio.nombre" 
+                     class="p-1.5 rounded-md border transition-all border-l-[3px] flex flex-col justify-between"
+                     :class="[
+                        medio.estado_fuente === 'n' ? 'bg-gray-100 border-gray-200 border-l-gray-300 opacity-60 grayscale' : (medio.saldo >= 0 ? 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-tema-2' : 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-red-400')
+                     ]">
+                  
+                  <div class="flex justify-between items-start mb-0.5 text-tema-3 text-tema-3">
+                    <h4 class="text-[7px] font-bold uppercase truncate pr-0.5 leading-tight" 
+                        :class="medio.estado_fuente === 'n' ? 'text-gray-400' : 'text-gray-500'"
+                        :title="medio.nombre">{{ medio.nombre }}</h4>
+                  </div>
+
+                  <div class="flex flex-col text-tema-3">
+                    <span class="text-[11px] font-black tracking-tighter" 
+                          :class="medio.estado_fuente === 'n' ? 'text-gray-500' : (medio.saldo >= 0 ? 'text-tema-1' : 'text-red-500')">
+                      $ {{ formatInput(medio.saldo) }} <span v-if="medio.moneda === 'USD'" class="text-[8px] text-gray-500 font-bold ml-0.5">USD</span>
+                    </span>
+                    <span v-if="medio.moneda === 'USD'" class="text-[7.5px] text-gray-400 font-bold leading-none mt-0.5">
+                      ≈ $ {{ formatInput(medio.saldo * trmUSD) }} COP
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 p-3 bg-tema-1 text-white rounded-lg shadow-lg flex justify-between items-center text-tema-bg text-tema-bg text-tema-bg">
+                <div class="leading-tight text-tema-bg">
+                   <h4 class="text-[8px] font-black uppercase tracking-widest text-tema-2 opacity-80">Saldo Consolidado</h4>
+                   <p class="text-[9px] opacity-60 uppercase">General (COP)</p>
+                </div>
+                <div class="text-right leading-none text-tema-bg">
+                   <span class="text-[17px] font-black tracking-tighter text-white">
+                     $ {{ formatInput(totalConsolidadoTesoreria) }}
+                   </span>
+                </div>
+            </div>
+          </div>
+
+          <div class="w-full lg:w-7/12">
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div class="bg-tema-1 px-4 py-2.5 flex justify-between items-center">
+                    <h3 class="text-white font-black uppercase tracking-widest text-[11px] flex items-center">
+                        <span class="material-symbols-outlined text-tema-2 mr-2 text-[16px]">fact_check</span>
+                        Auditoría y Cuadre de Caja
+                    </h3>
+                </div>
+                
+                <div class="p-2 bg-tema-bg/60 border-b border-gray-200 grid grid-cols-12 gap-2 text-[8px] font-black text-gray-400 uppercase tracking-tighter items-center">
+                    <div class="col-span-3">Fuente</div>
+                    <div class="col-span-2 text-right">Sistema</div>
+                    <div class="col-span-3 text-right">Saldo Real Físico</div>
+                    <div class="col-span-3 text-right text-tema-1">Diferencia</div>
+                    <div class="col-span-1 text-center">OK</div>
+                </div>
+                
+                <div class="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+                    <div v-for="m in saldosPlanos" :key="'cuadre-'+m.nombre" class="p-1.5 grid grid-cols-12 gap-2 items-center hover:bg-gray-50 transition-colors"
+                         :class="{'opacity-50 grayscale': m.estado_fuente === 'n'}">
+                        
+                        <div class="col-span-3 text-[9px] font-black text-tema-1 truncate flex flex-col leading-tight" :title="m.nombre">
+                            {{ m.nombre }}
+                            <span v-if="m.moneda === 'USD'" class="text-[7px] text-gray-400 font-bold uppercase mt-0.5">Moneda Base: USD</span>
+                        </div>
+                        
+                        <div class="col-span-2 text-right text-[10px] font-bold" :class="m.saldo >= 0 ? 'text-gray-500' : 'text-red-500'">
+                            $ {{ formatInput(m.saldo) }} <span v-if="m.moneda === 'USD'" class="text-[7px]">USD</span>
+                        </div>
+                        
+                        <div class="col-span-3 relative">
+                            <input type="text" 
+                                   :value="saldosReales[m.nombre]"
+                                   @input="$set(saldosReales, m.nombre, $event.target.value)"
+                                   @blur="$set(saldosReales, m.nombre, formatInput($event.target.value))"
+                                   @focus="$set(saldosReales, m.nombre, cleanInput($event.target.value))"
+                                   :disabled="m.estado_fuente === 'n'"
+                                   class="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] font-black text-right focus:ring-1 focus:ring-tema-1 outline-none text-tema-3 disabled:bg-gray-100"
+                                   placeholder="0">
+                            <span v-if="m.moneda === 'USD' && saldosReales[m.nombre]" class="absolute inset-y-0 left-2 flex items-center font-bold text-gray-400 text-[8px]">USD</span>
+                        </div>
+                        
+                        <div class="col-span-3 text-right">
+                            <input type="text"
+                                   disabled
+                                   :value="getDiff(m) === 0 ? '-' : (getDiff(m) > 0 ? '+ ' : '- ') + '$ ' + formatInput(Math.abs(getDiff(m))) + (m.moneda === 'USD' ? ' USD' : '')"
+                                   class="w-full border-none bg-transparent text-[10px] font-black text-right"
+                                   :class="getDiff(m) > 0 ? 'text-tema-4' : (getDiff(m) < 0 ? 'text-red-500' : 'text-gray-300')">
+                        </div>
+                        
+                        <div class="col-span-1 flex justify-center items-center">
+                            <input v-if="!isSavingAjuste[m.nombre]" 
+                                   type="checkbox" 
+                                   @change="ejecutarCuadre(m, $event)" 
+                                   :disabled="getDiff(m) === 0 || m.estado_fuente === 'n'" 
+                                   class="flash-checkbox scale-75">
+                            <div v-else class="loader-small border-t-tema-1 scale-75"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-2 bg-gray-100 border-t-2 border-gray-300 grid grid-cols-12 gap-2 items-center text-[10px] font-black uppercase tracking-tighter">
+                    <div class="col-span-3 text-tema-1">TOTALES (COP)</div>
+                    <div class="col-span-2 text-right text-gray-600">
+                        $ {{ formatInput(totalCuadreSistema) }}
+                    </div>
+                    <div class="col-span-3 text-right text-tema-3 pr-1">
+                        $ {{ formatInput(totalCuadreReal) }}
+                    </div>
+                    <div class="col-span-3 text-right" :class="totalCuadreDiferencia > 0 ? 'text-tema-4' : (totalCuadreDiferencia < 0 ? 'text-red-500' : 'text-gray-400')">
+                        {{ totalCuadreDiferencia === 0 ? '-' : (totalCuadreDiferencia > 0 ? '+ ' : '- ') + '$ ' + formatInput(Math.abs(totalCuadreDiferencia)) }}
+                    </div>
+                    <div class="col-span-1"></div>
+                </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- VISTA: LISTA -->
+      <div v-if="activeView === 'lista'" class="animate-fade-in flex flex-col h-full overflow-hidden text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+        <div class="flex justify-between items-center mb-4 border-b-2 border-gray-300 pb-2 flex-shrink-0 text-tema-3 text-tema-3">
+          <div class="flex items-center text-tema-1 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><span class="material-symbols-outlined text-3xl mr-3 text-tema-1">format_list_bulleted</span><h2 class="text-3xl font-black">Historial</h2></div>
+          <div v-if="isLoadingList || isSyncingBackground" class="flex items-center text-gray-500 text-sm text-tema-3 text-tema-3"><div class="loader-small mr-2 text-tema-3 text-tema-3"></div>Sincronizando...</div>
+        </div>
+
+        <!-- FILTROS -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-300 mb-4 space-y-3 flex-shrink-0 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+          <div class="flex flex-col md:flex-row gap-3 items-center text-tema-3 text-tema-3 text-tema-3">
+            <div class="flex-grow relative w-full text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><span class="material-symbols-outlined text-lg">search</span></span>
+              <input type="text" v-model="searchQuery" placeholder="Buscar movimiento..." class="w-full pl-10 pr-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-tema-1 outline-none text-sm text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+            </div>
+            
+            <div class="flex items-center gap-2 w-full md:w-auto text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+              <select v-model="filters.periodo" class="p-1.5 border border-gray-300 rounded-lg text-sm bg-white outline-none font-bold text-tema-1 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Todo el tiempo</option><option value="semana">Esta Semana (Lun-Dom)</option><option value="mes">Mes Actual</option><option value="mes_anterior">Mes Anterior</option><option value="año">Año Actual</option><option value="año_anterior">Año Anterior</option></select>
+              <div class="flex items-center bg-tema-bg p-1 px-2 rounded-lg border border-gray-200 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><label class="flex items-center cursor-pointer text-[9px] font-black uppercase text-tema-1 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><input type="checkbox" v-model="filters.useFechaPago" class="toggle-checkbox mr-1.5 scale-90">{{ filters.useFechaPago ? 'Pago' : 'Reg' }}</label></div>
+              <button @click="resetFilters" class="text-tema-1 text-xs font-bold hover:bg-tema-5/20 p-1.5 rounded transition-colors text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1 text-tema-3 text-tema-1"><span class="material-symbols-outlined text-sm">refresh</span></button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-[10px] text-tema-3 font-bold uppercase text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+            <select v-model="filters.tipo" class="p-1 border border-gray-300 rounded bg-white text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Tipos</option><option v-for="op in tiposOptions" :value="op" :key="op">{{op}}</option></select>
+            <select v-model="filters.grupo" class="p-1 border border-gray-300 rounded bg-white text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Grupos</option><option v-for="op in listGruposOptions" :value="op" :key="op">{{op}}</option></select>
+            <select v-model="filters.categoria" class="p-1 border border-gray-300 rounded bg-white text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Categorías</option><option v-for="op in listCategoriasOptions" :value="op" :key="op">{{op}}</option></select>
+            <select v-model="filters.tercero" class="p-1 border border-gray-300 rounded bg-white text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Terceros</option><option v-for="op in tercerosOptions" :value="op" :key="op">{{op}}</option></select>
+            <select v-model="filters.medio" class="p-1 border border-gray-300 rounded bg-white text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><option value="">Medios</option><option v-for="op in formasPagoOptions" :value="op" :key="op">{{op}}</option></select>
+          </div>
+        </div>
+
+        <!-- TABLA -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-300 flex-1 flex flex-col min-h-0 relative overflow-hidden text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+          <div class="overflow-auto flex-1 h-full scroll-area text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+            <table class="w-full text-left border-collapse table-auto relative text-sm text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+              <thead class="sticky top-0 z-20">
+                <tr class="bg-tema-1 text-white text-[10px] uppercase tracking-wider text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg"><th class="p-2 border-r border-white/10 w-12 text-center text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">ID</th><th class="p-2 border-r border-white/10 text-tema-bg text-center text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">Registro / Pago</th><th class="p-2 border-r border-white/10 text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">Categoría / Grupo</th><th class="p-2 border-r border-white/10 text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">Medio / Tercero</th><th class="p-2 border-r border-white/10 text-right text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">Valor</th><th class="p-2 border-r border-white/10 text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">Descripción</th><th class="p-2 text-center w-10 text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">X</th></tr>
+              </thead>
+              <tbody class="text-[11px] text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+                <tr v-for="t in dbListaFiltrada" :key="t.idx" class="border-b border-gray-100 hover:bg-tema-bg transition-colors h-11 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+                  <td class="p-2 font-mono text-gray-400 text-center text-[10px]">#{{ t.idx }}</td>
+                  <td class="p-2 whitespace-nowrap leading-tight text-center text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">
+                    <span class="font-bold text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">{{ t.fecha_registration || t.fecha_registro }}</span><br>
+                    <span class="text-[9px] text-gray-400 italic">Pago: {{ t.fecha_payment || t.fecha_pago }}</span>
+                  </td>
+                  <td class="p-2 leading-tight text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><span class="font-bold text-tema-3 uppercase text-[11px] text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">{{ t.categoria }}</span><br><span class="text-[9px] uppercase tracking-tighter" :class="getTipoColor(t.tipo)">{{ t.tipo }} &bull; {{ t.grupo }}</span></td>
+                  <td class="p-2 leading-tight text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><span class="font-medium text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1 text-tema-1">{{ t.medio }}</span><br><span class="text-[10px] text-gray-500">{{ t.tercero }}</span></td>
+                  <td class="p-2 font-black text-right text-sm text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3" :class="getValorColor(t.tipo)">${{ Number(t.valor).toLocaleString() }}</td>
+                  <td class="p-2 text-gray-500 max-w-[150px] truncate text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3" :title="t.descripcion">{{ t.descripcion }}</td>
+                  <td class="p-2 text-center text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3"><button @click="deleteTransaction(t)" class="text-red-300 hover:text-red-600 transition-colors transform hover:scale-110 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3" title="Eliminar"><span class="material-symbols-outlined text-lg">cancel</span></button></td>
+                </tr>
+                <tr v-if="dbListaFiltrada.length === 0 && !isLoadingList"><td colspan="8" class="p-12 text-center text-gray-400 italic text-sm text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3 text-tema-3">Sin movimientos encontrados.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- SUMATORIA STICKY -->
+          <div class="bg-tema-1 text-white py-1.5 px-4 border-t border-tema-2 shadow-2xl z-30 flex-shrink-0 flex justify-between items-center text-[9px] font-black uppercase tracking-tight text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white text-tema-bg text-white">
+             <div class="flex items-center gap-4">
+                 <span class="text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70 text-white/70">ITEMS: {{ dbListaFiltrada.length }}</span>
+                 <span class="text-tema-2 border-l border-white/20 pl-4">MARGEN: <span class="text-[11px]">{{ utilidadPorcentaje }}</span></span>
+             </div>
+             
+             <div class="flex gap-4 items-center">
+                 <div class="flex gap-3 border-r border-white/20 pr-4">
+                    <div class="flex flex-col items-end leading-none text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg"><span class="text-tema-2 text-[7px] opacity-70 uppercase">Ingresos</span><span class="text-tema-2 font-black text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2 text-tema-2">$ {{ formatInput(totalIngresos) }}</span></div>
+                    <div class="flex flex-col items-end leading-none text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg"><span class="text-red-400 text-[7px] opacity-70 uppercase">Gastos</span><span class="text-red-400 font-black text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400 text-red-400">$ {{ formatInput(totalGastos) }}</span></div>
+                 </div>
+                 <div class="flex gap-3 border-r border-white/20 pr-4 text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">
+                    <div class="flex flex-col items-end leading-none text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg"><span class="text-tema-5 text-[7px] opacity-70 uppercase">Activos</span><span class="text-tema-5 font-black text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5 text-tema-5">$ {{ formatInput(totalActivos) }}</span></div>
+                    <div class="flex flex-col items-end leading-none text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg"><span class="text-orange-300 text-[7px] opacity-70 uppercase">Pasivos</span><span class="text-orange-300 font-black text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300 text-orange-300">$ {{ formatInput(totalPasivos) }}</span></div>
+                 </div>
+                 <div class="flex flex-col items-end min-w-[70px] text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg">
+                    <span class="text-white/50 text-[7px] leading-none uppercase tracking-tighter text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50 text-white/50">Neto</span>
+                    <span class="text-[11px] font-black text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg text-tema-bg" :class="totalIngresos - totalGastos >= 0 ? 'text-tema-2' : 'text-red-400'">$ {{ formatInput(totalIngresos - totalGastos) }}</span>
+                 </div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISTA: DASHBOARD -->
+      <div v-if="activeView === 'dashboard'" class="animate-fade-in max-w-7xl mx-auto text-tema-3">
+        <div class="flex justify-between items-center mb-4 border-b-2 border-gray-300 pb-1.5">
+          <div class="flex items-center text-tema-1"><span class="material-symbols-outlined text-2xl mr-2">space_dashboard</span><h2 class="text-2xl font-black">Dashboard Financiero</h2></div>
+          
+          <div class="flex items-center gap-2">
+            <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Periodo:</span>
+            <select v-model="dashboardFilter" class="p-1 border border-gray-300 rounded-md text-[10px] bg-white outline-none font-bold text-tema-1 shadow-sm">
+              <option value="este_mes">Este Mes</option>
+              <option value="mes_pasado">Mes Pasado</option>
+              <option value="ytd">Este Año a la Fecha</option>
+              <option value="año_pasado">Año Pasado</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-if="isLoadingList" class="flex flex-col items-center justify-center p-20 text-gray-400">
+           <div class="loader mb-4"></div>
+           <p class="font-bold text-xs">Cargando métricas...</p>
+        </div>
+        <div v-else class="pb-10">
+            <!-- BLOQUE 1: TARJETAS KPI -->
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                
+                <!-- INGRESOS -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-tema-4">
+                    <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">Ingresos Totales</span>
+                    <span class="text-lg font-black text-tema-3 leading-none mb-1" :class="dashboardData.ingresos.curr > 0 ? 'text-tema-4' : ''">$ {{ formatInput(dashboardData.ingresos.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('ingreso', dashboardData.ingresos.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.ingresos.diff) }}</span>
+                        <span class="tracking-tighter">{{ formatAbs(dashboardData.ingresos.diff) }} ({{ formatPct(dashboardData.ingresos.pct) }})</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+
+                <!-- GASTOS -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-red-500">
+                    <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">Gastos Totales</span>
+                    <span class="text-lg font-black text-tema-3 leading-none mb-1" :class="dashboardData.gastos.curr > 0 ? 'text-red-500' : ''">$ {{ formatInput(dashboardData.gastos.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('gasto', dashboardData.gastos.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.gastos.diff * -1) }}</span>
+                        <span class="tracking-tighter">{{ formatAbs(dashboardData.gastos.diff) }} ({{ formatPct(dashboardData.gastos.pct) }})</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+
+                <!-- UTILIDAD -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-blue-400">
+                    <div class="flex justify-between items-center mb-0.5">
+                       <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider">Utilidad</span>
+                       <span class="text-[8px] font-black bg-tema-bg px-1.5 py-0.5 rounded" :class="dashboardData.utilidad.margin >= 0 ? 'text-tema-1' : 'text-red-500'">{{ formatPct(dashboardData.utilidad.margin) }} MG</span>
+                    </div>
+                    <span class="text-lg font-black text-tema-3 leading-none mb-1" :class="dashboardData.utilidad.curr > 0 ? 'text-tema-2' : (dashboardData.utilidad.curr < 0 ? 'text-red-500' : '')">$ {{ formatInput(dashboardData.utilidad.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('ingreso', dashboardData.utilidad.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.utilidad.diff) }}</span>
+                        <span class="tracking-tighter">{{ formatAbs(dashboardData.utilidad.diff) }} ({{ formatPct(dashboardData.utilidad.pct) }})</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+
+                <!-- DSR (DEUDA/INGRESO) -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-purple-500">
+                    <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">DSR (Deuda/Ingreso)</span>
+                    <span class="text-lg font-black text-purple-600 leading-none mb-1">{{ formatPct(dashboardData.dsr.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('gasto', dashboardData.dsr.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.dsr.diff * -1) }}</span>
+                        <span class="tracking-tighter">{{ dashboardData.dsr.diff > 0 ? '+' : '' }}{{ dashboardData.dsr.diff.toFixed(1) }} pts</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+
+                <!-- ACTIVOS (SOLO AHORRO/INVERSIÓN) -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-tema-5">
+                    <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">Saldo Ahorro / Inv.</span>
+                    <span class="text-lg font-black text-tema-3 leading-none mb-1" :class="dashboardData.activos.curr > 0 ? 'text-tema-5' : ''">$ {{ formatInput(dashboardData.activos.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('activo', dashboardData.activos.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.activos.diff) }}</span>
+                        <span class="tracking-tighter">{{ formatAbs(dashboardData.activos.diff) }} ({{ formatPct(dashboardData.activos.pct) }})</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+
+                <!-- PASIVOS -->
+                <div class="bg-white rounded-xl p-2.5 border border-gray-200 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border-l-[3px] border-l-orange-500">
+                    <span class="text-[9px] font-black uppercase text-gray-400 tracking-wider mb-0.5">Saldo Pasivos</span>
+                    <span class="text-lg font-black text-tema-3 leading-none mb-1" :class="dashboardData.pasivos.curr > 0 ? 'text-orange-500' : ''">$ {{ formatInput(dashboardData.pasivos.curr) }}</span>
+                    <div class="flex items-center text-[9px] font-bold" :class="getVarColor('pasivo', dashboardData.pasivos.diff)">
+                        <span class="material-symbols-outlined text-[11px] mr-0.5">{{ getVarIcon(dashboardData.pasivos.diff * -1) }}</span>
+                        <span class="tracking-tighter">{{ formatAbs(dashboardData.pasivos.diff) }} ({{ formatPct(dashboardData.pasivos.pct) }})</span>
+                    </div>
+                    <div class="text-[7px] text-gray-400 mt-1 uppercase tracking-widest truncate">{{ dashboardData.compareText }}</div>
+                </div>
+            </div>
+            
+            <!-- BLOQUE 2: TABLAS DE DETALLE -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                
+                <!-- TABLA GASTOS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div class="bg-red-50 border-b border-red-100 px-3 py-2 flex justify-between items-center">
+                        <h3 class="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">money_off</span> Gastos por Grupo</h3>
+                    </div>
+                    <div class="px-2 py-1.5 bg-gray-50/80 border-b border-gray-100 flex text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        <div class="w-1/3 pl-1">Grupo</div>
+                        <div class="w-1/4 text-right">Media (Mes)</div>
+                        <div class="w-1/4 text-right pr-2">Total</div>
+                        <div class="w-1/6 text-right pr-1">% Tipo</div>
+                    </div>
+                    <div class="p-1 overflow-y-auto max-h-56 text-[10px]">
+                        <div v-for="row in dashboardTables.gastos" :key="row.label" class="flex items-center py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 px-2">
+                            <span class="font-bold text-gray-600 truncate pr-2 w-1/3" :title="row.label">{{ row.label }}</span>
+                            <span class="font-mono text-gray-500 text-right w-1/4 pr-2">$ {{ formatInput(row.promedio) }}</span>
+                            <div class="flex flex-col items-end w-1/4 pr-2">
+                                <span class="font-black text-tema-3">$ {{ formatInput(row.curr) }}</span>
+                                <span class="text-[8px] font-bold flex items-center" :class="getVarColor('gasto', row.diff)">
+                                    <span class="material-symbols-outlined text-[10px] mr-0.5">{{ getVarIcon(row.diff * -1) }}</span>
+                                    {{ formatAbs(row.diff) }} ({{ formatPct(row.pct) }})
+                                </span>
+                            </div>
+                            <div class="w-1/6 flex items-center justify-end gap-1.5">
+                                <span class="font-bold text-[9px] text-gray-500 w-8 text-right">{{ row.pctTotal.toFixed(1) }}%</span>
+                                <div class="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden hidden sm:block">
+                                    <div class="h-full rounded-full bg-red-400" :style="{ width: Math.min(row.pctTotal, 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="dashboardTables.gastos.length === 0" class="text-center text-gray-400 italic py-4">Sin datos</div>
+                    </div>
+                </div>
+
+                <!-- TABLA INGRESOS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div class="bg-green-50 border-b border-green-100 px-3 py-2 flex justify-between items-center">
+                        <h3 class="text-[10px] font-black text-green-600 uppercase tracking-widest flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">attach_money</span> Ingresos por Categoría</h3>
+                    </div>
+                    <div class="px-2 py-1.5 bg-gray-50/80 border-b border-gray-100 flex text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        <div class="w-1/3 pl-1">Categoría</div>
+                        <div class="w-1/4 text-right">Media (Mes)</div>
+                        <div class="w-1/4 text-right pr-2">Total</div>
+                        <div class="w-1/6 text-right pr-1">% Tipo</div>
+                    </div>
+                    <div class="p-1 overflow-y-auto max-h-56 text-[10px]">
+                        <div v-for="row in dashboardTables.ingresos" :key="row.label" class="flex items-center py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 px-2">
+                            <span class="font-bold text-gray-600 truncate pr-2 w-1/3" :title="row.label">{{ row.label }}</span>
+                            <span class="font-mono text-gray-500 text-right w-1/4 pr-2">$ {{ formatInput(row.promedio) }}</span>
+                            <div class="flex flex-col items-end w-1/4 pr-2">
+                                <span class="font-black text-tema-3">$ {{ formatInput(row.curr) }}</span>
+                                <span class="text-[8px] font-bold flex items-center" :class="getVarColor('ingreso', row.diff)">
+                                    <span class="material-symbols-outlined text-[10px] mr-0.5">{{ getVarIcon(row.diff) }}</span>
+                                    {{ formatAbs(row.diff) }} ({{ formatPct(row.pct) }})
+                                </span>
+                            </div>
+                            <div class="w-1/6 flex items-center justify-end gap-1.5">
+                                <span class="font-bold text-[9px] text-gray-500 w-8 text-right">{{ row.pctTotal.toFixed(1) }}%</span>
+                                <div class="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden hidden sm:block">
+                                    <div class="h-full rounded-full bg-green-400" :style="{ width: Math.min(row.pctTotal, 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="dashboardTables.ingresos.length === 0" class="text-center text-gray-400 italic py-4">Sin datos</div>
+                    </div>
+                </div>
+
+                <!-- TABLA ACTIVOS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div class="bg-blue-50 border-b border-blue-100 px-3 py-2 flex justify-between items-center">
+                        <h3 class="text-[10px] font-black text-tema-5 uppercase tracking-widest flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">domain</span> Ahorro/Inv. por Tercero</h3>
+                    </div>
+                    <div class="px-2 py-1.5 bg-gray-50/80 border-b border-gray-100 flex text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        <div class="w-1/3 pl-1">Ahorro/Inv.</div>
+                        <div class="w-1/4 text-right">Media (Mes)</div>
+                        <div class="w-1/4 text-right pr-2">Total</div>
+                        <div class="w-1/6 text-right pr-1">% Tipo</div>
+                    </div>
+                    <div class="p-1 overflow-y-auto max-h-56 text-[10px]">
+                        <div v-for="row in dashboardTables.activos" :key="row.label" class="flex items-center py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 px-2">
+                            <span class="font-bold text-gray-600 truncate pr-2 w-1/3" :title="row.label">{{ row.label }}</span>
+                            <span class="font-mono text-gray-500 text-right w-1/4 pr-2">$ {{ formatInput(row.promedio) }}</span>
+                            <div class="flex flex-col items-end w-1/4 pr-2">
+                                <span class="font-black text-tema-3">$ {{ formatInput(row.curr) }}</span>
+                                <span class="text-[8px] font-bold flex items-center" :class="getVarColor('activo', row.diff)">
+                                    <span class="material-symbols-outlined text-[10px] mr-0.5">{{ getVarIcon(row.diff) }}</span>
+                                    {{ formatAbs(row.diff) }} ({{ formatPct(row.pct) }})
+                                </span>
+                            </div>
+                            <div class="w-1/6 flex items-center justify-end gap-1.5">
+                                <span class="font-bold text-[9px] text-gray-500 w-8 text-right">{{ row.pctTotal.toFixed(1) }}%</span>
+                                <div class="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden hidden sm:block">
+                                    <div class="h-full rounded-full bg-blue-400" :style="{ width: Math.min(row.pctTotal, 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="dashboardTables.activos.length === 0" class="text-center text-gray-400 italic py-4">Sin datos</div>
+                    </div>
+                </div>
+
+                <!-- TABLA PASIVOS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div class="bg-orange-50 border-b border-orange-100 px-3 py-2 flex justify-between items-center">
+                        <h3 class="text-[10px] font-black text-orange-500 uppercase tracking-widest flex items-center"><span class="material-symbols-outlined text-[14px] mr-1">account_balance</span> Pasivos por Tercero</h3>
+                    </div>
+                    <div class="px-2 py-1.5 bg-gray-50/80 border-b border-gray-100 flex text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        <div class="w-1/3 pl-1">Pasivo</div>
+                        <div class="w-1/4 text-right">Media (Mes)</div>
+                        <div class="w-1/4 text-right pr-2">Total</div>
+                        <div class="w-1/6 text-right pr-1">% Tipo</div>
+                    </div>
+                    <div class="p-1 overflow-y-auto max-h-56 text-[10px]">
+                        <div v-for="row in dashboardTables.pasivos" :key="row.label" class="flex items-center py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 px-2">
+                            <span class="font-bold text-gray-600 truncate pr-2 w-1/3" :title="row.label">{{ row.label }}</span>
+                            <span class="font-mono text-gray-500 text-right w-1/4 pr-2">$ {{ formatInput(row.promedio) }}</span>
+                            <div class="flex flex-col items-end w-1/4 pr-2">
+                                <span class="font-black text-tema-3">$ {{ formatInput(row.curr) }}</span>
+                                <span class="text-[8px] font-bold flex items-center" :class="getVarColor('pasivo', row.diff)">
+                                    <span class="material-symbols-outlined text-[10px] mr-0.5">{{ getVarIcon(row.diff * -1) }}</span>
+                                    {{ formatAbs(row.diff) }} ({{ formatPct(row.pct) }})
+                                </span>
+                            </div>
+                            <div class="w-1/6 flex items-center justify-end gap-1.5">
+                                <span class="font-bold text-[9px] text-gray-500 w-8 text-right">{{ row.pctTotal.toFixed(1) }}%</span>
+                                <div class="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden hidden sm:block">
+                                    <div class="h-full rounded-full bg-orange-400" :style="{ width: Math.min(row.pctTotal, 100) + '%' }"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="dashboardTables.pasivos.length === 0" class="text-center text-gray-400 italic py-4">Sin datos</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- BLOQUE 3: GRÁFICAS -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <!-- GRÁFICA P&G -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                    <h3 class="text-[11px] font-black uppercase text-tema-1 mb-2">Ingresos, Gastos y Utilidad (Últimos 12 Meses)</h3>
+                    <div class="relative h-60 w-full">
+                        <canvas id="chartPyg"></canvas>
+                    </div>
+                </div>
+                
+                <!-- GRÁFICA PASIVOS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                    <h3 class="text-[11px] font-black uppercase text-tema-1 mb-2">Evolución de Pasivos (Últimos 12 Meses)</h3>
+                    <div class="relative h-60 w-full">
+                        <canvas id="chartPasivos"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BLOQUE 4: TABLA DE ANÁLISIS DETALLADO -->
+            <div class="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col mb-4">
+                <div class="bg-tema-bg/50 border-b border-gray-200 px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+                    <h3 class="text-[11px] font-black text-tema-1 uppercase tracking-widest flex items-center">
+                        <span class="material-symbols-outlined text-[16px] mr-1.5">analytics</span> 
+                        Análisis General Detallado
+                    </h3>
+                    <div class="flex items-center gap-2 text-[10px] font-bold text-tema-3">
+                        <select v-model="dashTableFilterTipo" class="px-2 py-1 border border-gray-300 rounded bg-white outline-none focus:ring-1 focus:ring-tema-1 transition-all">
+                            <option value="">Todos los Tipos</option>
+                            <option value="Ingreso">Ingresos</option>
+                            <option value="Gasto">Gastos</option>
+                            <option value="Activo">Activos</option>
+                            <option value="Pasivo">Pasivos</option>
+                        </select>
+                        <select v-model="dashTableFilterGrupo" class="px-2 py-1 border border-gray-300 rounded bg-white outline-none focus:ring-1 focus:ring-tema-1 transition-all">
+                            <option value="">Todos los Grupos</option>
+                            <option v-for="g in dashTableGruposOptions" :value="g" :key="g">{{ g }}</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse table-auto text-[10px]">
+                        <thead class="bg-gray-50/80 text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                            <tr>
+                                <th class="p-2.5 font-black w-20">Tipo</th>
+                                <th class="p-2.5 font-black">Grupo</th>
+                                <th class="p-2.5 font-black">Categoría</th>
+                                <th class="p-2.5 font-black text-center" title="Transacciones en el periodo">Cant. (Tx)</th>
+                                <th class="p-2.5 font-black text-right" title="Promedio por mes activo en el periodo">Media (Mes)</th>
+                                <th class="p-2.5 font-black text-right">Valor Total</th>
+                                <th class="p-2.5 font-black text-right">Variación</th>
+                                <th class="p-2.5 font-black text-right w-24">% Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-tema-3">
+                            <tr v-for="(row, idx) in dashboardDetailedTable" :key="idx" class="border-b border-gray-100 hover:bg-tema-bg/40 transition-colors">
+                                <td class="p-2.5">
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter" :class="getTipoBadgeColor(row.tipo)">
+                                        {{ row.tipo }}
+                                    </span>
+                                </td>
+                                <td class="p-2.5 font-bold text-gray-600 truncate max-w-[100px]" :title="row.grupo">{{ row.grupo }}</td>
+                                <td class="p-2.5 font-bold truncate max-w-[120px]" :title="row.categoria">{{ row.categoria }}</td>
+                                <td class="p-2.5 text-center font-mono text-gray-500">{{ row.count }}</td>
+                                <td class="p-2.5 text-right font-mono text-gray-500">$ {{ formatInput(row.promedio) }}</td>
+                                <td class="p-2.5 text-right font-black text-[11px]" :class="getValorColor(row.tipo)">$ {{ formatInput(row.curr) }}</td>
+                                <td class="p-2.5 text-right">
+                                    <div class="flex flex-col items-end leading-none">
+                                        <span class="font-bold text-[9px] flex items-center justify-end" :class="getVarColor(row.tipo.toLowerCase(), row.diff)">
+                                            <span class="material-symbols-outlined text-[10px] mr-0.5">{{ getVarIcon(row.tipo === 'Gasto' || row.tipo === 'Pasivo' ? row.diff * -1 : row.diff) }}</span>
+                                            {{ formatAbs(row.diff) }}
+                                        </span>
+                                        <span class="text-[8px] text-gray-400 font-bold mt-0.5">{{ formatPct(row.pct) }}</span>
+                                    </div>
+                                </td>
+                                <td class="p-2.5">
+                                    <div class="flex items-center justify-end gap-1.5">
+                                        <span class="font-bold text-[9px] text-gray-500 w-8 text-right">{{ row.pctTotal.toFixed(1) }}%</span>
+                                        <div class="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                            <div class="h-full rounded-full" :class="getProgressBarColor(row.tipo)" :style="{ width: Math.min(row.pctTotal, 100) + '%' }"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="dashboardDetailedTable.length === 0">
+                                <td colspan="8" class="p-8 text-center text-gray-400 italic">No hay registros para este filtro en el periodo seleccionado.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="mt-4 bg-blue-50/50 border border-blue-100 p-3 rounded-lg text-[9px] text-gray-500 leading-relaxed max-w-3xl">
+                <span class="font-bold text-tema-1">Nota Metodológica:</span> 
+                <b>Ingresos, Gastos y Utilidad</b> miden el <i>flujo dentro del periodo</i>. 
+                <b>Activos y Pasivos</b> miden el <i>saldo acumulado histórico al cierre</i> del periodo. 
+                <b>Media (Mes)</b> toma el valor acumulado del periodo y lo divide entre la cantidad de meses en los que hubo actividad para esa categoría.
+                <b>DSR</b> (Debt Service Ratio) compara los pagos de pasivos (valores negativos) vs el ingreso del periodo.
+            </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+  <script src="./js/api.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
