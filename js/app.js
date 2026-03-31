@@ -64,6 +64,9 @@ new Vue({
     dashTableFilterTipo: '',
     dashTableFilterGrupo: '',
 
+    tesoreriaSelectedDefaultSources: ['Nequi', 'Daviplata', 'Cash', 'TD Bbva'],
+    tesoreriaSelectedSources: [],
+
     trmUSD: 4000,
     isFetchingTRM: false,
 
@@ -80,6 +83,10 @@ new Vue({
   },
 
   computed: {
+
+    hayFiltroTesoreria() {
+      return this.tesoreriaSelectedSources.length !== this.fuentesSeleccionablesTesoreria.length;
+    },
     displayName() {
       return this.userName || this.userEmail || 'Usuario';
     },
@@ -265,6 +272,30 @@ new Vue({
       let list = [];
       this.saldosAgrupados.forEach(g => { list = list.concat(g.medios); });
       return list;
+    },
+
+    fuentesSeleccionablesTesoreria() {
+      return this.saldosPlanos
+        .filter(medio => medio.estado_fuente === 'h')
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    },
+
+    totalSeleccionadoTesoreria() {
+      return this.fuentesSeleccionablesTesoreria.reduce((acc, medio) => {
+        if (!this.tesoreriaSelectedSources.includes(medio.nombre)) return acc;
+
+        const saldoCOP = medio.moneda === 'USD'
+          ? medio.saldo * (this.trmUSD || 0)
+          : medio.saldo;
+
+        return acc + saldoCOP;
+      }, 0);
+    },
+
+    cantidadFuentesSeleccionadasTesoreria() {
+      return this.fuentesSeleccionablesTesoreria.filter(medio =>
+        this.tesoreriaSelectedSources.includes(medio.nombre)
+      ).length;
     },
 
     totalConsolidadoTesoreria() {
@@ -758,7 +789,14 @@ new Vue({
         }
       },
       deep: true
-    }
+    },
+
+    fuentesSeleccionablesTesoreria: {
+      handler: function(nuevasFuentes) {
+        this.syncTesoreriaSelectedSources(nuevasFuentes);
+      },
+      immediate: true
+    },
   },
 
   mounted() {
@@ -886,6 +924,21 @@ new Vue({
       this.resetFilters();
       this.activeView = 'tesoreria';
       this.fetchListData();
+    },
+
+    syncTesoreriaSelectedSources(fuentes = this.fuentesSeleccionablesTesoreria) {
+      const disponibles = fuentes.map(f => f.nombre);
+
+      if (!this.tesoreriaSelectedSources.length) {
+        this.tesoreriaSelectedSources = this.tesoreriaSelectedDefaultSources.filter(nombre =>
+          disponibles.includes(nombre)
+        );
+        return;
+      }
+
+      this.tesoreriaSelectedSources = this.tesoreriaSelectedSources.filter(nombre =>
+        disponibles.includes(nombre)
+      );
     },
 
     openDashboard() {
@@ -1421,6 +1474,16 @@ new Vue({
 
     forceAutoLogout() {
       this.logout();
+    },
+
+    toggleFuenteTesoreria(nombre) {
+      const index = this.tesoreriaSelectedSources.indexOf(nombre);
+
+      if (index === -1) {
+        this.tesoreriaSelectedSources.push(nombre);
+      } else {
+        this.tesoreriaSelectedSources.splice(index, 1);
+      }
     },
 
     async fetchInitialDashboardData() {

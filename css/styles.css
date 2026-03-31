@@ -37,21 +37,22 @@
   margin: 0;
   font: inherit;
   color: currentColor;
-  width: 1.25em;
-  height: 1.25em;
-  border: 2px solid #D1D5DB;
-  border-radius: 0.25em;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 0.22em;
   display: grid;
   place-content: center;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
+  opacity: 0.8;
 }
 
 .flash-checkbox::before,
 .toggle-checkbox::before {
   content: "";
-  width: 0.7em;
-  height: 0.7em;
+  width: 0.55em;
+  height: 0.55em;
   transform: scale(0);
   transition: 120ms transform ease-in-out;
   box-shadow: inset 1em 1em #013362;
@@ -62,6 +63,13 @@
 .flash-checkbox:checked,
 .toggle-checkbox:checked {
   border-color: #013362;
+  opacity: 1;
+}
+
+.flash-checkbox:hover,
+.toggle-checkbox:hover {
+  border-color: #87D8C2;
+  opacity: 1;
 }
 
 .flash-checkbox:checked::before,
@@ -82,3 +90,73 @@
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
+
+.tesoreria-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #fff;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
+  border: 1px solid #CBD5E1;
+  border-radius: 3px;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.tesoreria-checkbox::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  transform: scale(0);
+  transition: transform 120ms ease-in-out;
+  box-shadow: inset 1em 1em #013362;
+  transform-origin: bottom left;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.tesoreria-checkbox:checked {
+  border-color: #013362;
+  background-color: #fff;
+}
+
+.tesoreria-checkbox:checked::before {
+  transform: scale(1);
+}
+
+.tesoreria-checkbox:hover {
+  border-color: #87D8C2;
+}
+
+.tesoreria-checkbox-mini {
+  width: 0.7em;
+  height: 0.7em;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 0.2em;
+  appearance: none;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  background: white;
+}
+
+.tesoreria-checkbox-mini::before {
+  content: "";
+  width: 0.4em;
+  height: 0.4em;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  box-shadow: inset 1em 1em #013362;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.tesoreria-checkbox-mini:checked::before {
+  transform: scale(1);
+}
+

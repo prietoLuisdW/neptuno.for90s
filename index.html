@@ -301,7 +301,7 @@
 
         <div v-else class="flex flex-col lg:flex-row gap-6 items-start">
           
-          <div class="w-full lg:w-5/12 space-y-3">
+          <div class="w-full lg:w-7/12 space-y-3">
             <div v-for="grupo in saldosAgrupados" :key="grupo.tipo" class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden animate-fade-in text-tema-3 text-tema-3">
               <div class="bg-gray-50/50 border-b border-gray-200 px-3 py-1 flex items-center justify-between text-tema-3">
                  <div class="flex items-center gap-2 text-tema-3">
@@ -316,44 +316,72 @@
 
               <div class="p-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 text-tema-3">
                 <div v-for="medio in grupo.medios" :key="medio.nombre" 
-                     class="p-1.5 rounded-md border transition-all border-l-[3px] flex flex-col justify-between"
-                     :class="[
-                        medio.estado_fuente === 'n' ? 'bg-gray-100 border-gray-200 border-l-gray-300 opacity-60 grayscale' : (medio.saldo >= 0 ? 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-tema-2' : 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-red-400')
-                     ]">
-                  
-                  <div class="flex justify-between items-start mb-0.5 text-tema-3 text-tema-3">
-                    <h4 class="text-[7px] font-bold uppercase truncate pr-0.5 leading-tight" 
-                        :class="medio.estado_fuente === 'n' ? 'text-gray-400' : 'text-gray-500'"
-                        :title="medio.nombre">{{ medio.nombre }}</h4>
-                  </div>
+                  class="relative p-1.5 rounded-md border transition-all border-l-[3px] flex flex-col justify-between"
+                  :class="[
+                      medio.estado_fuente === 'n'
+                        ? 'bg-gray-100 border-gray-200 border-l-gray-300 opacity-60 grayscale'
+                        : (medio.saldo >= 0
+                            ? 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-tema-2'
+                            : 'bg-tema-bg/20 hover:bg-tema-bg/50 border-gray-100 border-l-red-400')
+                  ]">
 
-                  <div class="flex flex-col text-tema-3">
-                    <span class="text-[11px] font-black tracking-tighter" 
-                          :class="medio.estado_fuente === 'n' ? 'text-gray-500' : (medio.saldo >= 0 ? 'text-tema-1' : 'text-red-500')">
-                      $ {{ formatInput(medio.saldo) }} <span v-if="medio.moneda === 'USD'" class="text-[8px] text-gray-500 font-bold ml-0.5">USD</span>
-                    </span>
-                    <span v-if="medio.moneda === 'USD'" class="text-[7.5px] text-gray-400 font-bold leading-none mt-0.5">
-                      ≈ $ {{ formatInput(medio.saldo * trmUSD) }} COP
-                    </span>
-                  </div>
+                <!-- ✅ CHECKBOX -->
+                <input
+                  v-if="medio.estado_fuente === 'h'"
+                  type="checkbox"
+                  :checked="tesoreriaSelectedSources.includes(medio.nombre)"
+                  @change="toggleFuenteTesoreria(medio.nombre)"
+                  class="absolute top-1 right-1 tesoreria-checkbox-mini"
+                >
+
+                <!-- HEADER -->
+                <div class="flex justify-between items-start mb-0.5">
+                  <h4 class="text-[7px] font-bold uppercase truncate pr-0.5 leading-tight"
+                      :class="medio.estado_fuente === 'n' ? 'text-gray-400' : 'text-gray-500'">
+                    {{ medio.nombre }}
+                  </h4>
                 </div>
+
+                <!-- SALDO -->
+                <div class="flex flex-col">
+                  <span class="text-[11px] font-black tracking-tighter"
+                        :class="medio.estado_fuente === 'n'
+                          ? 'text-gray-500'
+                          : (medio.saldo >= 0 ? 'text-tema-1' : 'text-red-500')">
+                    $ {{ formatInput(medio.saldo) }}
+                    <span v-if="medio.moneda === 'USD'" class="text-[8px] text-gray-500 font-bold ml-0.5">USD</span>
+                  </span>
+
+                  <span v-if="medio.moneda === 'USD'" class="text-[7.5px] text-gray-400 font-bold leading-none mt-0.5">
+                    ≈ $ {{ formatInput(medio.saldo * trmUSD) }} COP
+                  </span>
+                </div>
+              </div>
               </div>
             </div>
 
-            <div class="mt-4 p-3 bg-tema-1 text-white rounded-lg shadow-lg flex justify-between items-center text-tema-bg text-tema-bg text-tema-bg">
-                <div class="leading-tight text-tema-bg">
-                   <h4 class="text-[8px] font-black uppercase tracking-widest text-tema-2 opacity-80">Saldo Consolidado</h4>
-                   <p class="text-[9px] opacity-60 uppercase">General (COP)</p>
-                </div>
-                <div class="text-right leading-none text-tema-bg">
-                   <span class="text-[17px] font-black tracking-tighter text-white">
-                     $ {{ formatInput(totalConsolidadoTesoreria) }}
-                   </span>
-                </div>
+            <div class="mt-4 p-3 bg-tema-1 text-white rounded-lg shadow-lg flex flex-col gap-1">
+
+              <!-- TOTAL GENERAL -->
+              <div class="flex justify-between items-center">
+                <span class="text-[8px] uppercase opacity-70">Saldo General</span>
+                <span class="text-[15px] font-black">
+                  $ {{ formatInput(totalConsolidadoTesoreria) }}
+                </span>
+              </div>
+
+              <!-- SOLO SI HAY CAMBIO -->
+              <div v-if="hayFiltroTesoreria" class="flex justify-between items-center">
+                <span class="text-[8px] uppercase text-tema-2">Seleccionado</span>
+                <span class="text-[14px] font-black text-tema-2">
+                  $ {{ formatInput(totalSeleccionadoTesoreria) }}
+                </span>
+              </div>
+
             </div>
           </div>
 
-          <div class="w-full lg:w-7/12">
+          <div class="w-full lg:w-5/12">
             <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 <div class="bg-tema-1 px-4 py-2.5 flex justify-between items-center">
                     <h3 class="text-white font-black uppercase tracking-widest text-[11px] flex items-center">
