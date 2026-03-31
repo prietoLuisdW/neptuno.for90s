@@ -1111,15 +1111,14 @@ new Vue({
       if (this.isAuthenticated) {
         await this.fetchFormData();
 
-        if (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista') {
-          await this.fetchListData();
-        }
+        await this.fetchFormData();
+          this.logAccess();
 
-        if (this.activeView === 'dashboard') {
-          this.$nextTick(() => {
-            this.renderCharts();
-          });
-        }
+          if (this.activeView === 'dashboard') {
+            await this.fetchInitialDashboardData();
+          } else if (this.activeView === 'tesoreria' || this.activeView === 'lista') {
+            await this.fetchListData();
+          }
 
         this.bindActivityListeners();
         this.startInactivityTimer();
@@ -1157,17 +1156,17 @@ new Vue({
 
           this.isAuthenticated = true;
 
-          await this.fetchFormData();
-          await this.logAccess();
-
-          if (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista') {
-            await this.fetchListData();
-          }
-
           if (this.activeView === 'dashboard') {
-            this.$nextTick(() => {
-              this.renderCharts();
-            });
+            this.fetchFormData();
+            this.logAccess();
+            await this.fetchInitialDashboardData();
+          } else {
+            await this.fetchFormData();
+            this.logAccess();
+
+            if (this.activeView === 'tesoreria' || this.activeView === 'lista') {
+              await this.fetchListData();
+            }
           }
 
           this.bindActivityListeners();
@@ -1187,7 +1186,6 @@ new Vue({
       this.unbindActivityListeners();
 
       this.isAuthenticated = false;
-      this.loginForm.password = '';
       this.userName = '';
       this.userEmail = '';
       this.loginForm.password = '';
@@ -1423,6 +1421,56 @@ new Vue({
 
     forceAutoLogout() {
       this.logout();
+    },
+
+    async fetchInitialDashboardData() {
+      this.isLoadingList = true;
+      this.isSyncingBackground = false;
+      this.dbLista = [];
+
+      try {
+        const response1 = await apiGet('getListData', { onlyCurrentYear: true });
+
+        if (response1.success) {
+          this.dbLista = response1.data.items || [];
+        }
+
+        this.isLoadingList = false;
+
+        this.$nextTick(() => {
+          if (this.activeView === 'dashboard') {
+            this.renderCharts();
+          }
+        });
+
+        this.isSyncingBackground = true;
+
+        apiGet('getListData', { onlyCurrentYear: false })
+          .then(response2 => {
+            if (response2.success) {
+              this.dbLista = response2.data.items || [];
+            }
+
+            this.$nextTick(() => {
+              if (this.activeView === 'dashboard') {
+                this.renderCharts();
+              }
+            });
+          })
+          .catch(error => {
+            console.error(error);
+          })
+          .finally(() => {
+            this.isSyncingBackground = false;
+          });
+
+      } catch (error) {
+        console.error(error);
+        this.failedErrorMessage = 'Error cargando datos iniciales del dashboard';
+        this.showErrorModal = true;
+        this.isLoadingList = false;
+        this.isSyncingBackground = false;
+      }
     },
   }
 });
