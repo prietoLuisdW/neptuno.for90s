@@ -17,7 +17,7 @@ new Vue({
     isSidebarOpen: true,
     showSidebar: false,
     isDesktopView: true,
-    activeView: 'registrarPG',
+    activeView: 'dashboard',
 
     isLoadingFormData: false,
     isSavingPG: false,
@@ -71,7 +71,12 @@ new Vue({
     isSavingAjuste: {},
 
     chartPygInstance: null,
-    chartPasivosInstance: null
+    chartPasivosInstance: null,
+
+    inactivityTimeoutMs: 5 * 60 * 1000,
+    inactivityTimer: null,
+    activityListenersBound: false
+
   },
 
   computed: {
@@ -737,6 +742,10 @@ new Vue({
     },
 
     activeView: function(nv) {
+      if (this.isAuthenticated) {
+        this.resetInactivityTimer();
+      }
+
       if (nv === 'dashboard') {
         this.$nextTick(() => { this.renderCharts(); });
       }
@@ -757,6 +766,12 @@ new Vue({
     window.addEventListener('resize', this.checkScreenSize);
     this.verifyInitialUser();
     this.fetchTRM();
+  },
+
+  beforeDestroy() {
+    window.removeEventListener('resize', this.checkScreenSize);
+    this.clearInactivityTimer();
+    this.unbindActivityListeners();
   },
 
   methods: {
@@ -1087,7 +1102,28 @@ new Vue({
     },
 
     async verifyInitialUser() {
+      if (this.isAuthenticated && (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista')) {
+        this.isLoadingList = true;
+      }
+
       this.isCheckingUser = false;
+
+      if (this.isAuthenticated) {
+        await this.fetchFormData();
+
+        if (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista') {
+          await this.fetchListData();
+        }
+
+        if (this.activeView === 'dashboard') {
+          this.$nextTick(() => {
+            this.renderCharts();
+          });
+        }
+
+        this.bindActivityListeners();
+        this.startInactivityTimer();
+      }
     },
 
     async logAccess() {
@@ -1113,10 +1149,29 @@ new Vue({
         this.isLoggingIn = false;
 
         if (response.success) {
-          this.isAuthenticated = true;
           this.userName = response.data.user.name || '';
+
+          if (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista') {
+            this.isLoadingList = true;
+          }
+
+          this.isAuthenticated = true;
+
           await this.fetchFormData();
           await this.logAccess();
+
+          if (this.activeView === 'dashboard' || this.activeView === 'tesoreria' || this.activeView === 'lista') {
+            await this.fetchListData();
+          }
+
+          if (this.activeView === 'dashboard') {
+            this.$nextTick(() => {
+              this.renderCharts();
+            });
+          }
+
+          this.bindActivityListeners();
+          this.startInactivityTimer();
         } else {
           this.loginError = response.message || 'Credenciales inválidas';
         }
@@ -1128,7 +1183,13 @@ new Vue({
     },
 
     logout() {
+      this.clearInactivityTimer();
+      this.unbindActivityListeners();
+
       this.isAuthenticated = false;
+      this.loginForm.password = '';
+      this.userName = '';
+      this.userEmail = '';
       this.loginForm.password = '';
     },
 
@@ -1309,6 +1370,59 @@ new Vue({
         this.showErrorModal = true;
         console.error(error);
       }
-    }
+    },
+
+    startInactivityTimer() {
+      this.clearInactivityTimer();
+
+      this.inactivityTimer = setTimeout(() => {
+        this.forceAutoLogout();
+      }, this.inactivityTimeoutMs);
+    },
+
+    resetInactivityTimer() {
+      if (!this.isAuthenticated) return;
+      this.startInactivityTimer();
+    },
+
+    clearInactivityTimer() {
+      if (this.inactivityTimer) {
+        clearTimeout(this.inactivityTimer);
+        this.inactivityTimer = null;
+      }
+    },
+
+    handleUserActivity() {
+      if (!this.isAuthenticated) return;
+      this.resetInactivityTimer();
+    },
+
+    bindActivityListeners() {
+      if (this.activityListenersBound) return;
+
+      const events = ['click', 'keydown', 'input', 'change', 'touchstart', 'scroll'];
+
+      events.forEach(eventName => {
+        window.addEventListener(eventName, this.handleUserActivity, true);
+      });
+
+      this.activityListenersBound = true;
+    },
+
+    unbindActivityListeners() {
+      if (!this.activityListenersBound) return;
+
+      const events = ['click', 'keydown', 'input', 'change', 'touchstart', 'scroll'];
+
+      events.forEach(eventName => {
+        window.removeEventListener(eventName, this.handleUserActivity, true);
+      });
+
+      this.activityListenersBound = false;
+    },
+
+    forceAutoLogout() {
+      this.logout();
+    },
   }
 });
