@@ -64,7 +64,7 @@ new Vue({
     dashTableFilterTipo: '',
     dashTableFilterGrupo: '',
 
-    tesoreriaSelectedDefaultSources: ['Nequi', 'Daviplata', 'Cash', 'TD Bbva'],
+    tesoreriaSelectedDefaultSources: ['Nequi', 'Daviplata', 'Cash', 'Bbva Libreton #1782'],
     tesoreriaSelectedSources: [],
 
     trmUSD: 4000,
