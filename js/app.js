@@ -1535,5 +1535,72 @@ new Vue({
         this.isSyncingBackground = false;
       }
     },
+
+    parseExpression(val) {
+      if (!val) return val;
+
+      // limpiar
+      let exp = String(val)
+        .replace(/\./g, '')     // quitar separadores
+        .replace(/\s+/g, '')    // quitar espacios
+        .replace(/,/g, '');     // por si acaso
+
+      // validar caracteres permitidos
+      if (!/^[0-9+\-*]+$/.test(exp)) {
+        return val; // no es expresión válida
+      }
+
+      // evitar cosas raras como "+", "200+", "--"
+      if (/^[+\-*]/.test(exp) && !/^\+\d+/.test(exp)) return val;
+      if (/[+\-*]$/.test(exp)) return val;
+
+      try {
+        // 1. resolver multiplicaciones primero
+        while (exp.includes('*')) {
+          exp = exp.replace(/(\d+)\*(\d+)/, (_, a, b) => Number(a) * Number(b));
+        }
+
+        // 2. resolver suma/resta izquierda a derecha
+        let result = 0;
+        let current = '';
+        let operator = '+';
+
+        for (let i = 0; i < exp.length; i++) {
+          const char = exp[i];
+
+          if (['+', '-'].includes(char)) {
+            if (current === '') continue;
+
+            if (operator === '+') result += Number(current);
+            else result -= Number(current);
+
+            operator = char;
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+
+        if (current !== '') {
+          if (operator === '+') result += Number(current);
+          else result -= Number(current);
+        }
+
+        return result;
+
+      } catch (e) {
+        return val; // fallback seguro
+      }
+    },
+
+    handleValorBlur(val) {
+      if (!val) return '';
+
+      // 1. intentar evaluar
+      const calculado = this.parseExpression(val);
+
+      // 2. formatear resultado
+      return this.formatInput(calculado);
+    },
   }
 });
