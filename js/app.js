@@ -1539,57 +1539,61 @@ new Vue({
     parseExpression(val) {
       if (!val) return val;
 
-      // limpiar
       let exp = String(val)
-        .replace(/\./g, '')     // quitar separadores
-        .replace(/\s+/g, '')    // quitar espacios
-        .replace(/,/g, '');     // por si acaso
+        .replace(/\./g, '')
+        .replace(/\s+/g, '')
+        .replace(/,/g, '');
 
       // validar caracteres permitidos
-      if (!/^[0-9+\-*]+$/.test(exp)) {
-        return val; // no es expresión válida
-      }
-
-      // evitar cosas raras como "+", "200+", "--"
-      if (/^[+\-*]/.test(exp) && !/^\+\d+/.test(exp)) return val;
-      if (/[+\-*]$/.test(exp)) return val;
+      if (!/^[0-9+\-*/]+$/.test(exp)) return val;
 
       try {
-        // 1. resolver multiplicaciones primero
-        while (exp.includes('*')) {
-          exp = exp.replace(/(\d+)\*(\d+)/, (_, a, b) => Number(a) * Number(b));
-        }
+        // 🔹 Manejar negativos al inicio
+        if (exp[0] === '-') exp = '0' + exp;
 
-        // 2. resolver suma/resta izquierda a derecha
-        let result = 0;
-        let current = '';
-        let operator = '+';
+        // 🔹 Tokenizar
+        let tokens = exp.match(/(\d+|\+|\-|\*|\/)/g);
 
-        for (let i = 0; i < exp.length; i++) {
-          const char = exp[i];
+        if (!tokens) return val;
 
-          if (['+', '-'].includes(char)) {
-            if (current === '') continue;
+        // 🔹 Paso 1: resolver * y /
+        let stack = [];
+        let i = 0;
 
-            if (operator === '+') result += Number(current);
-            else result -= Number(current);
+        while (i < tokens.length) {
+          let token = tokens[i];
 
-            operator = char;
-            current = '';
+          if (token === '*' || token === '/') {
+            let prev = Number(stack.pop());
+            let next = Number(tokens[i + 1]);
+
+            let res = token === '*'
+              ? prev * next
+              : (next === 0 ? 0 : prev / next);
+
+            stack.push(res);
+            i += 2;
           } else {
-            current += char;
+            stack.push(token);
+            i++;
           }
         }
 
-        if (current !== '') {
-          if (operator === '+') result += Number(current);
-          else result -= Number(current);
+        // 🔹 Paso 2: resolver + y -
+        let result = Number(stack[0]);
+
+        for (let j = 1; j < stack.length; j += 2) {
+          let operator = stack[j];
+          let num = Number(stack[j + 1]);
+
+          if (operator === '+') result += num;
+          else result -= num;
         }
 
-        return result;
+        return Math.round(result);
 
       } catch (e) {
-        return val; // fallback seguro
+        return val;
       }
     },
 
