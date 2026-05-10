@@ -1284,10 +1284,15 @@ new Vue({
           medio: this.pgForm.formaPago,
           clase: fp.clase,
           tipo_fuente: fp.tipo_fuente,
+
+          genera_pasivo: fp.genera_pasivo || 'n',
+          tercero_fuente: fp.tercero_fuente || '',
+
           tercero: this.pgForm.tercero,
           valor: valorLimpio,
           descripcion: this.pgForm.descripcion,
           estado: 'h'
+          
         };
 
         const response = await apiPost('saveTransaction', { record });
@@ -1332,10 +1337,15 @@ new Vue({
           medio: item.medio,
           clase: fp.clase,
           tipo_fuente: fp.tipo_fuente,
+
+          genera_pasivo: fp.genera_pasivo || 'n',
+          tercero_fuente: fp.tercero_fuente || '',
+
           tercero: item.tercero,
           valor: valorLimpio,
           descripcion: item.descripcion,
           estado: 'h'
+          
         };
 
         const response = await apiPost('saveTransaction', { record });
